@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quora Content CMS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+    <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .content-card {
+            aspect-ratio: 1 / 1;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            border-radius: 1.5rem;
+        }
+        .content-card:hover { transform: translateY(-4px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); }
+        .content-card.selected { border: 4px solid #4f46e5; }
+        .card-overlay {
+            background: linear-gradient(transparent, rgba(0,0,0,0.85));
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            padding: 1rem;
+            color: white;
+        }
+        .selection-indicator {
+            position: absolute;
+            top: 0.75rem; right: 0.75rem;
+            background: #4f46e5;
+            color: white;
+            border-radius: 9999px;
+            padding: 0.4rem;
+            display: none;
+            z-index: 10;
+        }
+        .selected .selection-indicator { display: block; }
+        .gallery-count-badge {
+            position: absolute;
+            bottom: 0.75rem; right: 0.75rem;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+            color: white;
+            font-size: 0.65rem;
+            font-weight: 800;
+            padding: 0.2rem 0.5rem;
+            border-radius: 6px;
+            z-index: 5;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .front-image-badge {
+            position: absolute;
+            top: 0.75rem; left: 0.75rem;
+            background: #10b981;
+            color: white;
+            font-size: 0.7rem;
+            font-weight: bold;
+            padding: 0.25rem 0.6rem;
+            border-radius: 6px;
+            z-index: 10;
+        }
+        
+        .library-grid {
+            display: grid;
+            grid-template-columns: repeat(1, minmax(0, 1fr));
+            gap: 2rem;
+        }
+        @media (min-width: 640px) { .library-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        @media (min-width: 1024px) { .library-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+        #output-editor { background: white; min-height: 400px; border-radius: 0 0 8px 8px; }
+        .space-tag { background: rgba(255,255,255,0.2); backdrop-filter: blur(4px); border-radius: 4px; padding: 2px 8px; font-size: 0.7rem; font-weight: 600; }
+        .drop-zone { border: 2px dashed #cbd5e1; transition: all 0.2s ease; background: #fff; }
+        .drop-zone.dragover { border-color: #6366f1; background-color: #f5f3ff; }
+        
+        .fetch-success { color: #10b981; font-weight: 800; }
+    </style>
+</head>
+<body style="display:none;">
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+  const firebaseConfig = {
+  apiKey: "AIzaSyA6sUTI5E8arl4Pw1dD9XZn6gK396rt3FA",
+  authDomain: "quoracms.firebaseapp.com",
+  projectId: "quoracms",
+  storageBucket: "quoracms.firebasestorage.app",
+  messagingSenderId: "111684245151",
+  appId: "1:111684245151:web:0cd55819db9d01cc1434aa",
+  measurementId: "G-29JSMWD2JZ"
+};
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      // ✅ Logged in → show page
+      document.body.style.display = "block";
+    } else {
+      // ❌ Not logged in → redirect
+      window.location.href = "login.html";
+    }
+  });
+</script>
+
+    <div class="container mx-auto p-4 lg:p-8 space-y-8">
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-2xl shadow-sm gap-4 border border-slate-100">
+            <div>
+                <h1 class="text-3xl font-bold tracking-tight text-indigo-600 uppercase italic">Quora CMS v3.5</h1>
+                <p class="text-slate-500 text-sm">Universal Site Content Management System.</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <button onclick="document.getElementById('settingsModal').classList.remove('hidden')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 256 256"><path d="M128,80a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Zm88,40a8,8,0,0,1-8,8H48a8,8,0,0,1,0-16H208A8,8,0,0,1,216,200ZM240,128a112,112,0,1,1-112-112A112.12,112.12,0,0,1,240,128Zm-16,0a96,96,0,1,0-96,96A96.11,96.11,0,0,0,224,128Z"></path></svg>
+                    Settings
+                </button>
+                <code id="user-id-display" class="text-xs font-mono text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg border border-indigo-100">Connecting...</code>
+            </div>
+        </header>
+
+        <!-- Method Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- Reddit Scraper -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-6">
+                <h2 class="text-lg font-bold text-orange-600 uppercase tracking-tighter text-center">1. Reddit API Scraper</h2>
+                <div>
+                    <label class="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Paste Reddit Link</label>
+                    <input type="url" id="redditUrl" placeholder="https://reddit.com/r/pics/..." class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-500 transition-all">
+                </div>
+                <div class="flex items-center justify-between px-1">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="isFrontImage" class="w-4 h-4 text-orange-600 border-slate-300 rounded">
+                        <label for="isFrontImage" class="text-xs font-bold text-slate-500 uppercase">Top/Front Position</label>
+                    </label>
+                    <p id="reddit-fetch-status" class="text-xs font-bold text-orange-500 hidden"></p>
+                </div>
+            </div>
+
+            <!-- Universal Fetcher -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-6">
+                <h2 class="text-lg font-bold text-blue-600 uppercase tracking-tighter text-center">2. Universal Link Fetcher</h2>
+                <div>
+                    <label class="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Paste Website Link</label>
+                    <input type="url" id="universalUrl" placeholder="Paste link..." class="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all">
+                </div>
+                <div id="universal-fetch-status" class="text-[10px] font-black text-blue-500 uppercase hidden">Analyzing Meta Data...</div>
+            </div>
+        </div>
+
+        <!-- Manual Submission Section -->
+        <div class="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+            <h2 class="text-xl font-bold text-indigo-600 mb-6 uppercase tracking-tighter flex items-center gap-2">
+                3. Manual Submission
+                <span id="manual-status-indicator" class="text-[10px] font-black bg-slate-100 text-slate-400 px-2 py-0.5 rounded ml-2 uppercase transition-all duration-300">Waiting for Image</span>
+            </h2>
+            <div class="space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div id="dropZone" class="drop-zone p-6 rounded-2xl text-center cursor-pointer min-h-[120px] flex flex-col items-center justify-center gap-2 hover:border-indigo-400 transition-all">
+                        <svg class="w-8 h-8 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        <p class="text-[10px] text-slate-400 font-black uppercase tracking-wider">Drag & Drop Image or Click</p>
+                        <p id="upload-status" class="text-[10px] text-indigo-600 font-black hidden uppercase">Uploading...</p>
+                        <input type="file" id="manualFile" class="hidden" accept="image/*">
+                    </div>
+                    <div class="flex flex-col justify-center gap-4">
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Paste Direct Image URL</label>
+                            <input type="url" id="manualImgUrlInput" placeholder="https://site.com/image.png" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 h-14">
+                        </div>
+                        <div class="flex items-center gap-2 ml-1">
+                            <input type="checkbox" id="manualMarkFront" class="w-5 h-5 text-indigo-600 border-slate-300 rounded-lg">
+                            <label for="manualMarkFront" class="text-xs font-bold text-slate-500 uppercase tracking-tighter">Mark as Front Image</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Caption / Title</label>
+                        <input type="text" id="manualCaption" placeholder="Caption (optional)" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Source URL</label>
+                        <div class="flex gap-2">
+                            <input type="url" id="manualSource" placeholder="https://..." class="flex-grow bg-slate-50 border border-slate-200 rounded-xl px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+                            <button id="manualAddBtn" class="bg-indigo-600 text-white font-black px-8 py-3 rounded-xl text-xs hover:bg-indigo-700 transition-all uppercase tracking-widest shadow-lg shadow-indigo-100">Add to Library</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <input type="hidden" id="manualImgUrlHidden">
+        </div>
+
+        <!-- Preferences Modal -->
+        <div id="settingsModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+            <div class="bg-white w-full max-w-lg rounded-3xl p-8 shadow-2xl">
+                <h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-widest">Preferences</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase">ScraperAPI Key</label>
+                        <input type="password" id="scraperApiKey" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm outline-none">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Global Post Prefix</label>
+                            <textarea id="postPrefixInput" rows="3" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs outline-none" placeholder="Text at start of every post..."></textarea>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Global Post Suffix</label>
+                            <textarea id="postSuffixInput" rows="3" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs outline-none" placeholder="Text at end of every post..."></textarea>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Source Citation Label</label>
+                        <select id="sourceFormatSelect" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm outline-none font-bold">
+                            <option value="source">Simple Word: "(Source)"</option>
+                            <option value="sub">Site/Sub: "(r/Pics or Instagram)"</option>
+                            <option value="user">User: "(u/Creator)"</option>
+                        </select>
+                    </div>
+                    <div class="flex justify-end gap-3 pt-6 border-t">
+                        <button onclick="document.getElementById('settingsModal').classList.add('hidden')" class="px-6 py-2 text-slate-400 font-bold uppercase text-xs">Close</button>
+                        <button id="saveSettingsBtn" class="bg-indigo-600 text-white px-8 py-2 rounded-xl font-bold text-sm shadow-lg shadow-indigo-200">Save Preferences</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Library Filters -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6">
+            <div class="w-full md:w-1/3">
+                <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Filter by Source</label>
+                <select id="space-filter" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none mt-1"></select>
+            </div>
+            <div class="flex gap-2 bg-slate-100 p-1 rounded-2xl overflow-hidden">
+                <button class="filter-btn active px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-tighter" data-type="unused">Unused</button>
+                <button class="filter-btn px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-tighter" data-type="all">History</button>
+                <button class="filter-btn px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-tighter text-red-500" data-type="recycle">Recycle Bin</button>
+            </div>
+        </div>
+
+        <!-- Library Grid -->
+        <div class="space-y-6">
+            <div id="gallery" class="library-grid"></div>
+            <div class="text-center">
+                <button id="loadMoreBtn" class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-500 px-16 py-4 rounded-2xl text-[10px] font-black uppercase tracking-[.3em] hidden transition-all shadow-sm">Load More Content</button>
+            </div>
+        </div>
+
+        <!-- Arrange & Generate Post Builder -->
+        <div id="arrange-section" class="bg-indigo-50/50 p-10 rounded-[3rem] border border-indigo-100 hidden">
+            <h2 class="text-2xl font-black uppercase text-indigo-600 tracking-tighter mb-8">Arrange Post Order</h2>
+            <div id="sortable-list" class="space-y-8"></div>
+        </div>
+
+        <div class="bg-white rounded-[3rem] shadow-2xl border border-slate-100 overflow-hidden">
+            <div class="p-10 border-b flex justify-between items-center">
+                <h2 class="text-2xl font-black uppercase text-slate-800 tracking-tighter">Live Post Generation</h2>
+                <div class="flex gap-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="boldTextToggle" checked class="w-5 h-5 rounded-lg text-indigo-600">
+                        <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Bold Mode</span>
+                    </label>
+                    <button id="generateBtn" class="bg-indigo-600 text-white px-10 py-3 rounded-2xl font-black text-xs hover:shadow-2xl hover:scale-105 transition-all uppercase tracking-widest active:scale-95">Generate Post</button>
+                </div>
+            </div>
+            <div id="output-editor"></div>
+            <div class="p-10 bg-slate-50 border-t flex flex-col gap-4">
+                <span class="text-[10px] font-black text-slate-400 uppercase tracking-[.3em]">Citation Bibliography</span>
+                <textarea id="sources-output" readonly rows="4" class="w-full bg-white border border-slate-200 rounded-3xl p-6 text-[11px] font-mono text-slate-500 outline-none resize-none shadow-inner"></textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="copy-status" class="fixed bottom-10 right-10 bg-slate-900 text-white px-8 py-4 rounded-3xl shadow-2xl text-[10px] font-black uppercase tracking-widest hidden z-50">Post Copied</div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyA6sUTI5E8arl4Pw1dD9XZn6gK396rt3FA",
+            authDomain: "quoracms.firebaseapp.com",
+            projectId: "quoracms",
+            storageBucket: "quoracms.firebasestorage.app",
+            messagingSenderId: "111684245151",
+            appId: "1:111684245151:web:0cd55819db9d01cc1434aa",
+            measurementId: "G-29JSMWD2JZ"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = 'quora-cms';
+        const IMGBB_API_KEY = '1663bd194a8fb9274308b4c12d2c4b33';
+
+        let items = [];
+        let selectedOrder = []; 
+        let activeFilters = { type: 'unused', space: 'all' };
+        let quill = null;
+        let libLimit = 24;
+
+        const init = async () => {
+            if (typeof Quill !== 'undefined') {
+                quill = new Quill('#output-editor', { theme: 'snow', modules: { toolbar: false } });
+            }
+            document.getElementById('scraperApiKey').value = localStorage.getItem('scraper_key') || '';
+            document.getElementById('sourceFormatSelect').value = localStorage.getItem('cms_source_fmt') || 'source';
+            document.getElementById('postPrefixInput').value = localStorage.getItem('cms_post_prefix') || '';
+            document.getElementById('postSuffixInput').value = localStorage.getItem('cms_post_suffix') || '';
+            await signInAnonymously(auth);
+        };
+
+        onAuthStateChanged(auth, (u) => {
+            if (u) {
+                document.getElementById('user-id-display').textContent = "LIVE: " + u.uid.substring(0,8);
+                startListening();
+            }
+        });
+
+        const getUrlList = (item) => {
+            let list = [];
+            const extract = (val) => {
+                if (typeof val === 'string') return val;
+                if (val && typeof val === 'object') {
+                    if (val.stringValue) return val.stringValue;
+                    if (val.value) return extract(val.value);
+                }
+                return null;
+            };
+            const rawUrls = item.imageUrls || item.imageUrl;
+            if (rawUrls) {
+                if (Array.isArray(rawUrls)) list = rawUrls.map(extract);
+                else if (typeof rawUrls === 'object') {
+                    if (rawUrls.arrayValue && rawUrls.arrayValue.values) list = rawUrls.arrayValue.values.map(v => extract(v));
+                    else { const s = extract(rawUrls); if (s) list = [s]; }
+                } else if (typeof rawUrls === 'string') list = [rawUrls];
+            }
+            return list.filter(u => u && typeof u === 'string' && u.startsWith('http'));
+        };
+
+        const startListening = () => {
+            const contentRef = collection(db, 'artifacts', appId, 'public', 'data', 'content');
+            onSnapshot(contentRef, (snap) => {
+                items = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                items.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+                updateSpaceDropdown();
+                renderGallery();
+                renderSortableList();
+            });
+        };
+
+        const renderGallery = () => {
+            const container = document.getElementById('gallery');
+            container.innerHTML = '';
+            
+            const filtered = items.filter(i => {
+                if (activeFilters.type === 'recycle') return i.deleted === true || i.used === true;
+                if (i.deleted === true || i.used === true) return false;
+                const s = activeFilters.space === 'all' || i.space === activeFilters.space;
+                return s;
+            });
+
+            if (filtered.length > libLimit) document.getElementById('loadMoreBtn').classList.remove('hidden');
+            else document.getElementById('loadMoreBtn').classList.add('hidden');
+
+            const show = filtered.slice(0, libLimit);
+
+            show.forEach(item => {
+                const isSelected = selectedOrder.some(s => s.itemId === item.id);
+                const urls = getUrlList(item);
+                const card = document.createElement('div');
+                card.className = `content-card shadow-sm border ${isSelected ? 'selected' : ''}`;
+                
+                let acts = activeFilters.type === 'recycle' ? `
+                    <div class="absolute top-4 left-4 flex gap-2 z-20">
+                        <button class="restore-btn bg-green-500 text-white p-2 rounded-xl shadow-lg hover:scale-110 transition-all"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg></button>
+                        <button class="perm-del-btn bg-red-600 text-white p-2 rounded-xl shadow-lg hover:scale-110 transition-all"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                    </div>
+                ` : `
+                    <button class="del-btn absolute top-4 right-4 bg-white/30 backdrop-blur text-white p-2 rounded-xl opacity-0 group-hover:opacity-100 transition-all shadow-xl hover:bg-red-600"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path d="M6 18L18 6M6 6l12 12"></path></svg></button>
+                `;
+
+                card.innerHTML = `
+                    <div class="group relative w-full h-full">
+                        <img src="${urls[0] || ''}" class="w-full h-full object-cover" onerror="this.src='https://placehold.co/500x500/f1f5f9/94a3b8?text=Syncing...'">
+                        ${item.isFrontImage ? '<div class="front-image-badge shadow-xl border border-white/20 uppercase tracking-tighter">★ FRONT</div>' : ''}
+                        <div class="card-overlay">
+                            <p class="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1 opacity-80">${item.space || 'Standard'}</p>
+                            <p class="text-sm font-bold leading-tight line-clamp-2">${item.caption || "NO Caption"}</p>
+                        </div>
+                        ${urls.length > 1 ? `<div class="gallery-count-badge shadow-xl"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>${urls.length}</div>` : ''}
+                        ${acts}
+                    </div>
+                `;
+
+                card.onclick = async (e) => {
+                    if (e.target.closest('.del-btn')) { e.stopPropagation(); await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'content', item.id), { deleted: true }); return; }
+                    if (e.target.closest('.restore-btn')) { e.stopPropagation(); await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'content', item.id), { deleted: false, used: false }); return; }
+                    if (e.target.closest('.perm-del-btn')) { e.stopPropagation(); await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'content', item.id)); return; }
+                    
+                    if (activeFilters.type !== 'recycle') {
+                        if (isSelected) selectedOrder = selectedOrder.filter(s => s.itemId !== item.id);
+                        else selectedOrder.push({ itemId: item.id, deselectedIndices: [] });
+                        renderGallery(); renderSortableList();
+                    }
+                };
+                container.appendChild(card);
+            });
+        };
+
+        const renderSortableList = () => {
+            const list = document.getElementById('sortable-list');
+            const section = document.getElementById('arrange-section');
+            list.innerHTML = '';
+            if (!selectedOrder.length) { section.classList.add('hidden'); return; }
+            section.classList.remove('hidden');
+
+            selectedOrder.forEach((sel, index) => {
+                const item = items.find(i => i.id === sel.itemId);
+                if (!item) return;
+                const urls = getUrlList(item);
+                const block = document.createElement('div');
+                block.className = 'bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm space-y-8';
+                block.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-6">
+                            <span class="bg-indigo-600 text-white text-sm font-black w-10 h-10 flex items-center justify-center rounded-[1rem] shadow-xl">${index + 1}</span>
+                            <h4 class="font-black text-slate-800 text-lg uppercase tracking-tighter truncate max-w-2xl">${item.caption || "NO Caption"}</h4>
+                        </div>
+                        <div class="flex gap-2">
+                             <button class="up-btn p-2 text-slate-200 hover:text-indigo-600 transition-colors"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="4"><path d="M5 15l7-7 7 7"></path></svg></button>
+                             <button class="down-btn p-2 text-slate-200 hover:text-indigo-600 transition-colors"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="4"><path d="M19 9l-7 7-7-7"></path></svg></button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-6 bg-slate-50/50 p-8 rounded-[2rem]">
+                        ${urls.map((u, uIdx) => `
+                            <div class="relative cursor-pointer" onclick="toggleSubImage('${item.id}', ${uIdx})">
+                                <img src="${u}" class="aspect-square w-full object-cover rounded-[1.5rem] border-4 ${sel.deselectedIndices.includes(uIdx) ? 'opacity-30 border-transparent grayscale' : 'border-indigo-500'} transition-all duration-300">
+                                ${!sel.deselectedIndices.includes(uIdx) ? '<div class="absolute -top-3 -right-3 bg-indigo-600 text-white rounded-full p-2 shadow-2xl border-2 border-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="6"><polyline points="20 6 9 17 4 12"></polyline></svg></div>' : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                block.querySelector('.up-btn').onclick = () => { if(index > 0) { [selectedOrder[index], selectedOrder[index-1]] = [selectedOrder[index-1], selectedOrder[index]]; renderSortableList(); }};
+                block.querySelector('.down-btn').onclick = () => { if(index < selectedOrder.length-1) { [selectedOrder[index], selectedOrder[index+1]] = [selectedOrder[index+1], selectedOrder[index]]; renderSortableList(); }};
+                list.appendChild(block);
+            });
+        };
+
+        window.toggleSubImage = (itemId, idx) => {
+            const sel = selectedOrder.find(s => s.itemId === itemId);
+            if (!sel) return;
+            if (sel.deselectedIndices.includes(idx)) sel.deselectedIndices = sel.deselectedIndices.filter(i => i !== idx);
+            else sel.deselectedIndices.push(idx);
+            renderSortableList();
+        };
+
+        const generatePost = async () => {
+            if (!selectedOrder.length) return;
+            const isBold = document.getElementById('boldTextToggle').checked;
+            const sourceFmt = document.getElementById('sourceFormatSelect').value;
+            const prefix = localStorage.getItem('cms_post_prefix') || '';
+            const suffix = localStorage.getItem('cms_post_suffix') || '';
+            
+            quill.setContents([]);
+            let biblio = "";
+            let counter = 1;
+
+            if (prefix) quill.insertText(quill.getLength() - 1, prefix + "\n\n");
+
+            selectedOrder.forEach(sel => {
+                const item = items.find(i => i.id === sel.itemId);
+                if (!item) return;
+                const urls = getUrlList(item).filter((_, idx) => !sel.deselectedIndices.includes(idx));
+                if (urls.length === 0) return;
+
+                quill.insertText(quill.getLength() - 1, `${counter}. ${item.caption || "NO Caption"}\n`, { bold: isBold });
+                
+                let label = "Source";
+                if (sourceFmt === 'sub') label = item.space || "Source";
+                else if (sourceFmt === 'user') label = item.author ? `u/${item.author}` : "Source";
+
+                quill.insertText(quill.getLength() - 1, "(", { bold: isBold, link: null });
+                quill.insertText(quill.getLength() - 1, label, { link: item.sourceUrl, bold: isBold });
+                quill.insertText(quill.getLength() - 1, ")\n", { bold: isBold, link: null });
+
+                urls.forEach(u => {
+                    quill.insertEmbed(quill.getLength() - 1, 'image', u);
+                    quill.insertText(quill.getLength() - 1, "\n-\n", { bold: true, align: 'center' });
+                });
+
+                biblio += `${counter}. ${item.sourceUrl}\n`;
+                counter++;
+            });
+
+            if (suffix) quill.insertText(quill.getLength() - 1, "\n" + suffix);
+
+            setTimeout(() => {
+                const range = document.createRange();
+                range.selectNodeContents(document.querySelector('.ql-editor'));
+                const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+                document.execCommand('copy');
+                document.getElementById('copy-status').classList.remove('hidden');
+                setTimeout(() => document.getElementById('copy-status').classList.add('hidden'), 3500);
+                
+                if(confirm("Post Copied! Mark items as USED?")) {
+                    selectedOrder.forEach(s => updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'content', s.itemId), { used: true }));
+                    selectedOrder = []; renderGallery(); renderSortableList();
+                }
+            }, 100);
+        };
+
+        const handleRedditFetch = async (url) => {
+            const key = localStorage.getItem('scraper_key');
+            if (!key) return alert("Save ScraperAPI key in Preferences!");
+            document.getElementById('reddit-fetch-status').textContent = "Syncing...";
+            document.getElementById('reddit-fetch-status').classList.remove('hidden');
+            try {
+                let jUrl = url.split('?')[0];
+                if (!jUrl.endsWith('.json')) jUrl += '.json';
+                const res = await fetch(`https://api.scraperapi.com?api_key=${key}&url=${encodeURIComponent(jUrl)}`);
+                const json = await res.json();
+                const data = json[0]?.data?.children[0]?.data;
+                if (data) {
+                    let imgs = data.is_gallery ? Object.values(data.media_metadata).map(m => m.s.u.replaceAll('&amp;', '&')) : [data.url_overridden_by_dest || data.url];
+                    await setDoc(doc(collection(db, 'artifacts', appId, 'public', 'data', 'content')), {
+                        caption: data.title, imageUrls: imgs, imageUrl: imgs[0],
+                        sourceUrl: `https://reddit.com${data.permalink}`, space: data.subreddit_name_prefixed,
+                        author: data.author, isFrontImage: document.getElementById('isFrontImage').checked,
+                        used: false, deleted: false, createdAt: serverTimestamp()
+                    });
+                    document.getElementById('redditUrl').value = '';
+                    document.getElementById('reddit-fetch-status').classList.add('hidden');
+                }
+            } catch (e) { document.getElementById('reddit-fetch-status').textContent = "Failed"; }
+        };
+
+        const handleUniversalFetch = async (url) => {
+            const key = localStorage.getItem('scraper_key');
+            if (!key) return alert("Key required!");
+            document.getElementById('universal-fetch-status').classList.remove('hidden');
+            try {
+                const res = await fetch(`https://api.scraperapi.com?api_key=${key}&url=${encodeURIComponent(url)}`);
+                const html = await res.text();
+                const docObj = new DOMParser().parseFromString(html, 'text/html');
+                const ogTitle = docObj.querySelector('meta[property="og:title"]')?.content || docObj.title;
+                const ogImage = docObj.querySelector('meta[property="og:image"]')?.content || "";
+                if (ogImage) {
+                    await setDoc(doc(collection(db, 'artifacts', appId, 'public', 'data', 'content')), {
+                        caption: ogTitle || "NO Caption", imageUrl: ogImage, imageUrls: [ogImage],
+                        sourceUrl: url, space: "Web", used: false, deleted: false, createdAt: serverTimestamp()
+                    });
+                    document.getElementById('universalUrl').value = '';
+                }
+            } catch (e) {}
+            document.getElementById('universal-fetch-status').classList.add('hidden');
+        };
+
+        const updateSpaceDropdown = () => {
+            const dropdown = document.getElementById('space-filter');
+            const current = dropdown.value;
+            const spaces = [...new Set(items.map(i => i.space))].filter(Boolean);
+            dropdown.innerHTML = '<option value="all">All Sources</option>';
+            spaces.forEach(s => dropdown.innerHTML += `<option value="${s}">${s}</option>`);
+            dropdown.value = current;
+        };
+
+        document.getElementById('saveSettingsBtn').onclick = () => {
+            localStorage.setItem('scraper_key', document.getElementById('setApiKey').value);
+            localStorage.setItem('cms_source_fmt', document.getElementById('sourceFormatSelect').value);
+            localStorage.setItem('cms_post_prefix', document.getElementById('postPrefixInput').value);
+            localStorage.setItem('cms_post_suffix', document.getElementById('postSuffixInput').value);
+            document.getElementById('settingsModal').classList.add('hidden');
+            showToast("Preferences Committed!");
+        };
+
+        document.getElementById('redditUrl').oninput = (e) => { if(e.target.value.includes('reddit.com')) handleRedditFetch(e.target.value); };
+        document.getElementById('universalUrl').oninput = (e) => { if(e.target.value.length > 20) handleUniversalFetch(e.target.value); };
+        document.getElementById('generateBtn').onclick = generatePost;
+        document.getElementById('space-filter').onchange = (e) => { activeFilters.space = e.target.value; renderGallery(); };
+        document.querySelectorAll('.filter-btn').forEach(b => b.onclick = () => {
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active', 'bg-indigo-600', 'text-white'));
+            b.classList.add('active', 'bg-indigo-600', 'text-white');
+            activeFilters.type = b.dataset.type; renderGallery();
+        });
+
+        document.getElementById('loadMoreBtn').onclick = () => { libLimit += 24; renderGallery(); };
+
+        document.getElementById('manualImgUrlInput').oninput = (e) => {
+            const url = e.target.value.trim();
+            const indicator = document.getElementById('manual-status-indicator');
+            if (url.startsWith('http')) {
+                indicator.textContent = "✅ Image Detected";
+                indicator.className = "text-[10px] font-black bg-green-100 text-green-600 px-2 py-0.5 rounded ml-2 uppercase";
+            } else if (url === "") {
+                indicator.textContent = "Waiting for Image";
+                indicator.className = "text-[10px] font-black bg-slate-100 text-slate-400 px-2 py-0.5 rounded ml-2 uppercase";
+            }
+        };
+
+        document.getElementById('manualAddBtn').onclick = async () => {
+            const img = document.getElementById('manualImgUrlInput').value.trim() || document.getElementById('manualImgUrlHidden').value;
+            const cap = document.getElementById('manualCaption').value.trim();
+            const src = document.getElementById('manualSource').value.trim();
+            const indicator = document.getElementById('manual-status-indicator');
+            if (!img) return alert("Image required.");
+            try {
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'content'), {
+                    caption: cap || "NO Caption", imageUrl: img, imageUrls: [img], sourceUrl: src || "",
+                    space: "Manual", isFrontImage: document.getElementById('manualMarkFront').checked,
+                    used: false, deleted: false, createdAt: serverTimestamp()
+                });
+                document.getElementById('manualImgUrlInput').value = '';
+                document.getElementById('manualImgUrlHidden').value = '';
+                document.getElementById('manualCaption').value = '';
+                document.getElementById('manualSource').value = '';
+                indicator.textContent = "Waiting for Image";
+                indicator.className = "text-[10px] font-black bg-slate-100 text-slate-400 px-2 py-0.5 rounded ml-2 uppercase";
+                showToast("Block added!");
+            } catch (err) { alert("Error adding block."); }
+        };
+
+        const dropZone = document.getElementById('dropZone');
+        dropZone.onclick = () => document.getElementById('manualFile').click();
+        dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add('dragover'); };
+        dropZone.ondragleave = () => dropZone.classList.remove('dragover');
+        dropZone.ondrop = (e) => {
+            e.preventDefault(); dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files[0]) handleManualUpload(e.dataTransfer.files[0]);
+        };
+        document.getElementById('manualFile').onchange = (e) => { if (e.target.files[0]) handleManualUpload(e.target.files[0]); };
+
+        async function handleManualUpload(file) {
+            if (!file.type.startsWith('image/')) return alert("Images only.");
+            const uploadStatus = document.getElementById('upload-status');
+            const indicator = document.getElementById('manual-status-indicator');
+            uploadStatus.textContent = "Uploading..."; uploadStatus.classList.remove('hidden');
+            const reader = new FileReader();
+            reader.onload = async (evt) => {
+                const formData = new FormData();
+                formData.append('image', evt.target.result.split(',')[1]);
+                try {
+                    const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, { method: 'POST', body: formData });
+                    const json = await res.json();
+                    if (json.success) {
+                        document.getElementById('manualImgUrlHidden').value = json.data.url;
+                        uploadStatus.textContent = "Ready!";
+                        indicator.textContent = "✅ File Uploaded";
+                        indicator.className = "text-[10px] font-black bg-green-100 text-green-600 px-2 py-0.5 rounded ml-2 uppercase";
+                    }
+                } catch (e) { uploadStatus.textContent = "Error"; }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        const showToast = (m) => {
+            const t = document.getElementById('copy-status');
+            t.textContent = m; t.classList.remove('hidden');
+            setTimeout(() => t.classList.add('hidden'), 3000);
+        };
+
+        init();
+    </script>
+</body>
+</html>
